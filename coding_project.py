@@ -45,7 +45,12 @@ def solve_linkage(r1, r2, r3, r4, theta2):
 
         # Law of Cosines on triangle BCD to find angle 'beta' at B
         # Use np.clip to handle floating-point inaccuracies
-        beta = np.arccos(np.clip((r3**2 + c_squared - r4**2) / (2 * r3 * c), -1.0, 1.0))
+        # print(type(r3),type(c_squared),type(r4),type(c))
+        denominator = 2 * r3 * c
+        if denominator == 0:
+            return None, None  # No valid solution in this case
+        else:
+            beta = np.arccos(np.clip((r3**2 + c_squared - r4**2) / denominator, -1.0, 1.0))
 
         # Angle of vector BD with x-axis
         gamma = np.arctan2(BD_vec_y, BD_vec_x)
@@ -119,7 +124,6 @@ def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
 
     return intervals
 
-# ------------------------------------------------------------------------------------------
 # ------------------------------------------------------------------------------------------
 def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500):
     """
@@ -311,7 +315,16 @@ def main():
 
     if demo == "2":
         # This preset is a classic Grashof crank-rocker linkage
-        Coupler_lengths = {"Ground Link": 1, "Input Link": 1, "Coupler Link": 1, "Output Link": 1}
+        while True:
+            try:
+                n = int(input(f"Select scalar value (n) for preset [n >= 20, n is even]: "))
+                if n >= 20 and n % 2 == 0:
+                    break
+                else:
+                    print("Value must be scalar, even and greater than 10.")
+            except ValueError:
+                print("Invalid input, please try again.")
+        Coupler_lengths = {"Ground Link": n-1, "Input Link": n/2, "Coupler Link": 1, "Output Link": n/2}
         Coupler_offsets = {"parallel": 0, "perpendicular": 0}
         Assembly_mode = "Both"
         mech_type = classify_mechanism(Coupler_lengths)
