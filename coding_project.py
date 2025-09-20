@@ -1,3 +1,4 @@
+import math
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -125,7 +126,8 @@ def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
     return intervals
 
 # ------------------------------------------------------------------------------------------
-def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500):
+def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500, 
+                       set_angles=None, ground_angle=0.0):
     """
     Computes and plots the coupler curve of a 4-bar linkage.
 
@@ -133,82 +135,109 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500):
         r1, r2, r3, r4 (float): Link lengths
         offset (dict): {"parallel": value, "perpendicular": value} - offsets from coupler link
         assembly (str): "open", "crossed", or "both"
-        nsteps (int): Number of points for the plot
+        nsteps (int): Number of points for the plot (if set_angles not provided)
+        set_angles (list or np.ndarray): Optional list of theta2 angles (radians) to use directly
+        ground_angle (float): Ground link orientation angle in radians
 
     Returns:
         list: List of coupler point coordinates [(x, y), ...]
     """
     points = []
-    theta_intervals = find_theta_limits(r1, r2, r3, r4, ngrid=5000)
-    if not theta_intervals:
-        print("    WARNING: Coupler curve cannot be computed.")
-        return points
+    theta_intervals = None
+
+    # Use set angles directly if provided
+    if set_angles is not None:
+        thetas2 = np.linspace(set_angles[0], set_angles[1], nsteps)
+    else:
+        theta_intervals = find_theta_limits(r1, r2, r3, r4, ngrid=5000)
+        if not theta_intervals:
+            print("    WARNING: Coupler curve cannot be computed.")
+            return points
 
     plt.figure(figsize=(8, 8))
 
-    for a, b in theta_intervals:
-        print(f"Feasible θ₂ range: {np.degrees(a):.2f}° to {np.degrees(b):.2f}°")
-        thetas2 = np.linspace(a, b, nsteps)
+    # Define rotation matrix for ground angle
+    R = np.array([[np.cos(ground_angle), -np.sin(ground_angle)],
+                  [np.sin(ground_angle),  np.cos(ground_angle)]])
 
-        # Helper function to compute coupler point from the midpoint
-        def get_coupler_point(theta2_val, theta3_val):
-            B = np.array([r2 * np.cos(theta2_val), r2 * np.sin(theta2_val)])
-            C = B + np.array([r3 * np.cos(theta3_val), r3 * np.sin(theta3_val)])
-            
-            # Calculate the midpoint of the coupler link (segment BC)
-            midpoint = (B + C) / 2
-            
-            BC_vec = C - B
-            if np.linalg.norm(BC_vec) == 0:
-                return B  # Handle degenerate case
-            
-            u = BC_vec / np.linalg.norm(BC_vec)
-            n = np.array([-u[1], u[0]])
-            
-            # Apply offsets from the midpoint
-            P = midpoint + offset['parallel'] * u + offset['perpendicular'] * n
-            return P
+    def get_coupler_point(theta2_val, theta3_val):
+        B = np.array([r2 * np.cos(theta2_val), r2 * np.sin(theta2_val)])
+        C = B + np.array([r3 * np.cos(theta3_val), r3 * np.sin(theta3_val)])
+        
+        # Midpoint of BC
+        midpoint = (B + C) / 2
+        BC_vec = C - B
+        if np.linalg.norm(BC_vec) == 0:
+            return R @ B  # Rotate degenerate case
+        
+        u = BC_vec / np.linalg.norm(BC_vec)
+        n = np.array([-u[1], u[0]])
+        
+        P = midpoint + offset['parallel'] * u + offset['perpendicular'] * n
+        return R @ P   # Apply ground rotation
 
-        # Initialize the previous point for continuity check
+    if set_angles is not None:
+        # Direct evaluation at specified angles
         prev_point = None
-
-        for i, theta2 in enumerate(thetas2):
+        for theta2 in thetas2:
             solutions = solve_linkage(r1, r2, r3, r4, theta2)
             if solutions is None or not solutions[0] or not solutions[1]:
                 continue
-            
+
             open_sol, crossed_sol = solutions
+            current_open_point = get_coupler_point(theta2, open_sol[0])
+            current_crossed_point = get_coupler_point(theta2, crossed_sol[0])
 
             if assembly.lower() == "both":
-                # For 'both', we simply add both solutions
                 if open_sol[0] is not None:
-                    points.append(get_coupler_point(theta2, open_sol[0]))
+                    points.append(current_open_point)
                 if crossed_sol[0] is not None:
-                    points.append(get_coupler_point(theta2, crossed_sol[0]))
-            
+                    points.append(current_crossed_point)
             else:
-                # For 'open' or 'crossed', choose the solution closest to the previous point
+                if prev_point is None:
+                    prev_point = current_open_point if assembly.lower()=="open" else current_crossed_point
+                    points.append(prev_point)
+                else:
+                    dist_open = np.linalg.norm(current_open_point - prev_point)
+                    dist_crossed = np.linalg.norm(current_crossed_point - prev_point)
+                    if dist_open < dist_crossed:
+                        prev_point = current_open_point
+                    else:
+                        prev_point = current_crossed_point
+                    points.append(prev_point)
+
+    else:
+        # Sweep feasible intervals
+        for a, b in theta_intervals:
+            print(f"Feasible θ₂ range: {np.degrees(a):.2f}° to {np.degrees(b):.2f}°")
+            thetas2 = np.linspace(a, b, nsteps)
+
+            prev_point = None
+            for i, theta2 in enumerate(thetas2):
+                solutions = solve_linkage(r1, r2, r3, r4, theta2)
+                if solutions is None or not solutions[0] or not solutions[1]:
+                    continue
+
+                open_sol, crossed_sol = solutions
                 current_open_point = get_coupler_point(theta2, open_sol[0])
                 current_crossed_point = get_coupler_point(theta2, crossed_sol[0])
 
-                if i == 0:
-                    # For the first point, use the assembly mode to choose
-                    if assembly.lower() == "open":
-                        prev_point = current_open_point
-                        points.append(prev_point)
-                    else: # assembly is "crossed"
-                        prev_point = current_crossed_point
-                        points.append(prev_point)
+                if assembly.lower() == "both":
+                    if open_sol[0] is not None:
+                        points.append(current_open_point)
+                    if crossed_sol[0] is not None:
+                        points.append(current_crossed_point)
                 else:
-                    # For subsequent points, pick the one closest to the last point
-                    dist_open = np.linalg.norm(current_open_point - prev_point)
-                    dist_crossed = np.linalg.norm(current_crossed_point - prev_point)
-
-                    if dist_open < dist_crossed:
-                        prev_point = current_open_point
+                    if i == 0:
+                        prev_point = current_open_point if assembly.lower()=="open" else current_crossed_point
                         points.append(prev_point)
                     else:
-                        prev_point = current_crossed_point
+                        dist_open = np.linalg.norm(current_open_point - prev_point)
+                        dist_crossed = np.linalg.norm(current_crossed_point - prev_point)
+                        if dist_open < dist_crossed:
+                            prev_point = current_open_point
+                        else:
+                            prev_point = current_crossed_point
                         points.append(prev_point)
 
     if points:
@@ -217,10 +246,10 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500):
         plt.xlabel("x")
         plt.ylabel("y")
         plt.axis("equal")
-        plt.title(f"Coupler Curve ({assembly})")
+        plt.title(f"Coupler Curve ({assembly}, ground={np.degrees(ground_angle):.1f}°)")
         plt.show()
 
-    return points
+    return
 
 # ------------------------------------------------------------------------------------------
 def take_inputs():
@@ -262,7 +291,19 @@ def take_inputs():
         else:
             print("Invalid option, try again.")
 
-    return Coupler_lengths, Coupler_offsets, Assembly_mode
+
+    while True:
+            try:
+                ground_angle = float(input(f"Enter ground angle [0,360°]: "))
+                if 0 <= ground_angle <= 360:
+                    ground_angle = math.radians(ground_angle)
+                    break
+                else:
+                    print("Invalid input, please enter a float between 0 and 360")
+            except ValueError:
+                print("Invalid input, please enter a number.")
+                
+    return Coupler_lengths, Coupler_offsets, Assembly_mode, ground_angle
 
 
 # ------------------------------------------------------------------------------------------
@@ -314,25 +355,18 @@ def main():
             print("Please answer with 1 or 2.")
 
     if demo == "2":
-        # This preset is a classic Grashof crank-rocker linkage
-        while True:
-            try:
-                n = int(input(f"Select scalar value (n) for preset [n >= 20, n is even]: "))
-                if n >= 20 and n % 2 == 0:
-                    break
-                else:
-                    print("Value must be scalar, even and greater than 10.")
-            except ValueError:
-                print("Invalid input, please try again.")
-        Coupler_lengths = {"Ground Link": n-1, "Input Link": n/2, "Coupler Link": 1, "Output Link": n/2}
-        Coupler_offsets = {"parallel": 0, "perpendicular": 0}
-        Assembly_mode = "Both"
+        Coupler_lengths = {"Ground Link": 20, "Input Link": 15, "Coupler Link": 11, "Output Link": 15}
+        Coupler_offsets = {"parallel": 0, "perpendicular": -22}
+        angles = [0.85,1.55]
+        ground_angle = 1.57
+        Assembly_mode = "Open"
         mech_type = classify_mechanism(Coupler_lengths)
         print(f"Mechanism classification: {mech_type}")
     else:
-        Coupler_lengths, Coupler_offsets, Assembly_mode = take_inputs()
+        Coupler_lengths, Coupler_offsets, Assembly_mode, ground_angle = take_inputs()
         mech_type = classify_mechanism(Coupler_lengths)
         print(f"Mechanism classification: {mech_type}")
+        angles = None
 
     coupler_curve_geom(
         Coupler_lengths['Ground Link'],
@@ -341,7 +375,9 @@ def main():
         Coupler_lengths["Output Link"],
         Coupler_offsets,
         Assembly_mode,
-        nsteps=1000
+        nsteps=1000,
+        set_angles=angles,
+        ground_angle=ground_angle
     )
 
 
