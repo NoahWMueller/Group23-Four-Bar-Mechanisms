@@ -124,6 +124,42 @@ def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
 
     return intervals
 
+def get_coupler_point(r2, r3, offset, theta2_val, theta3_val, R):
+    """
+    Computes the position of a specified point on the coupler link of a four-bar mechanism.
+
+    Args:
+        r2 (float): Length of the input link (B).
+        r3 (float): Length of the coupler link (BC).
+        offset (dict): Dictionary with 'parallel' and 'perpendicular' offsets from the midpoint of BC.
+            - 'parallel': Distance along the coupler link (BC).
+            - 'perpendicular': Distance perpendicular to the coupler link (BC).
+        theta2_val (float): Input link angle (radians).
+        theta3_val (float): Coupler link angle (radians).
+
+    Returns:
+        np.ndarray: 2D coordinates of the coupler point after applying ground rotation.
+    """
+    # Calculate position of input pivot B
+    B = np.array([r2 * np.cos(theta2_val), r2 * np.sin(theta2_val)])
+    # Calculate position of coupler pivot C (relative to B)
+    C = B + np.array([r3 * np.cos(theta3_val), r3 * np.sin(theta3_val)])
+    # Find the midpoint of BC
+    midpoint = (B + C) / 2
+    # Vector from B to C
+    BC_vec = C - B
+    # Handle degenerate case: BC_vec is zero (B and C coincide)
+    if np.linalg.norm(BC_vec) == 0:
+        return R @ B  # Return rotated B if BC is a point
+    # Unit vector along BC (direction of coupler link)
+    u = BC_vec / np.linalg.norm(BC_vec)
+    # Perpendicular unit vector to BC (for offset direction)
+    n = np.array([-u[1], u[0]])
+    # Calculate coupler point position using offsets from midpoint
+    P = midpoint + offset['parallel'] * u + offset['perpendicular'] * n
+    # Apply ground rotation matrix R to the coupler point
+    return R @ P
+
 # ------------------------------------------------------------------------------------------
 def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500, 
                        set_angles=None, ground_angle=0.0):
@@ -156,23 +192,6 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
     R = np.array([[np.cos(ground_angle), -np.sin(ground_angle)],
                   [np.sin(ground_angle),  np.cos(ground_angle)]])
 
-    def get_coupler_point(theta2_val, theta3_val):
-        # Calculate coupler point position given input and coupler angles
-        B = np.array([r2 * np.cos(theta2_val), r2 * np.sin(theta2_val)])
-        C = B + np.array([r3 * np.cos(theta3_val), r3 * np.sin(theta3_val)])
-        # Midpoint of BC
-        midpoint = (B + C) / 2
-        BC_vec = C - B
-        if np.linalg.norm(BC_vec) == 0:
-            return R @ B  # Degenerate case: return rotated B
-        # Unit vector along BC
-        u = BC_vec / np.linalg.norm(BC_vec)
-        # Perpendicular vector to BC
-        n = np.array([-u[1], u[0]])
-        # Offset from midpoint
-        P = midpoint + offset['parallel'] * u + offset['perpendicular'] * n
-        return R @ P   # Apply ground rotation
-
     if set_angles is not None:
         # Direct evaluation at specified theta2 angles
         prev_point = None
@@ -182,8 +201,8 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
                 continue
 
             open_sol, crossed_sol = solutions
-            current_open_point = get_coupler_point(theta2, open_sol[0])
-            current_crossed_point = get_coupler_point(theta2, crossed_sol[0])
+            current_open_point = get_coupler_point(r2, r3, offset, theta2, open_sol[0], R)
+            current_crossed_point = get_coupler_point(r2, r3, offset, theta2, crossed_sol[0], R)
 
             if assembly.lower() == "both":
                 if open_sol[0] is not None:
@@ -216,8 +235,8 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
                     continue
 
                 open_sol, crossed_sol = solutions
-                current_open_point = get_coupler_point(theta2, open_sol[0])
-                current_crossed_point = get_coupler_point(theta2, crossed_sol[0])
+                current_open_point = get_coupler_point(r2, r3, offset, theta2, open_sol[0], R)
+                current_crossed_point = get_coupler_point(r2, r3, offset, theta2, crossed_sol[0], R)
 
                 if assembly.lower() == "both":
                     if open_sol[0] is not None:
