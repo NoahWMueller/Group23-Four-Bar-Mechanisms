@@ -2,92 +2,91 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 
-# ==========================================================================================
+############################################################################################
 # 4-BAR LINKAGE ANALYSIS PROGRAM
-# ==========================================================================================
-# This program:
-# 1. Takes link lengths, coupler offsets, and assembly mode from the user
-# 2. Classifies the linkage using Grashof’s criterion
-# 3. Finds feasible input angle ranges (theta2_min and theta2_max)
-# 4. Plots the coupler curve of the mechanism
-# 5. Issues warnings if the linkage is impossible
-# ==========================================================================================
+############################################################################################
+#
+# USAGE INSTRUCTIONS:
+# 1. Run this script from your terminal (`python coding_project.py`).
+# 2. Choose to enter custom linkage parameters (Option 1) or use a preset demo (Option 2).
+# 3. For custom input, enter positive lengths for each of the four links (Ground, Input, Coupler, Output).
+# 4. Specify parallel and perpendicular offsets for the coupler point (location of interest on the coupler link).
+# 5. Select the assembly mode: "Open", "Crossed", or "Both".
+# 6. Enter the ground link's orientation angle (in degrees).
+# 7. The program will classify the mechanism (Grashof's criterion), determine valid input angle ranges, and plot the coupler curve.
+#
+############################################################################################
 
 # ------------------------------------------------------------------------------------------
 def solve_linkage(r1, r2, r3, r4, theta2):
     """
-    Solves the four-bar linkage using the Law of Cosines to find the
-    angles of the coupler (theta3) and output (theta4) links.
+    Compute the coupler and output link angles for a four-bar linkage using the Law of Cosines.
 
-    Parameters:
-        r1, r2, r3, r4 (float): Link lengths (Ground, Input, Coupler, Output)
-        theta2 (float): Input angle (radians)
+    Args:
+        r1, r2, r3, r4 (float): Link lengths (Ground, Input, Coupler, Output).
+        theta2 (float): Input angle in radians.
 
     Returns:
-        tuple: A tuple containing two solution tuples for (theta3, theta4):
-               ((theta3_open, theta4_open), (theta3_crossed, theta4_crossed))
-               Returns (None, None) if no real solution exists.
+        tuple: ((theta3_open, theta4_open), (theta3_crossed, theta4_crossed)),
+               or (None, None) if no real solution exists for the given theta2.
     """
     try:
-        # Position of input pivot B
+        # Calculate position of input pivot B
         Bx = r2 * np.cos(theta2)
         By = r2 * np.sin(theta2)
 
-        # Vector from B to ground pivot D
+        # Vector from B to ground pivot D (fixed at (r1, 0))
         Dx = r1
         BD_vec_x = Dx - Bx
         BD_vec_y = 0 - By
         c_squared = BD_vec_x**2 + BD_vec_y**2
         c = np.sqrt(c_squared)
 
-        # Check for impossible configurations (triangle inequality)
+        # Triangle inequality: check if configuration is possible
         if c > r3 + r4 or c < abs(r3 - r4):
             return None, None
 
-        # Law of Cosines on triangle BCD to find angle 'beta' at B
-        # Use np.clip to handle floating-point inaccuracies
-        # print(type(r3),type(c_squared),type(r4),type(c))
+        # Law of Cosines: find angle 'beta' at B
         denominator = 2 * r3 * c
         if denominator == 0:
-            return None, None  # No valid solution in this case
-        else:
-            beta = np.arccos(np.clip((r3**2 + c_squared - r4**2) / denominator, -1.0, 1.0))
+            return None, None  # Degenerate case
+        beta = np.arccos(np.clip((r3**2 + c_squared - r4**2) / denominator, -1.0, 1.0))
 
-        # Angle of vector BD with x-axis
+        # Angle of BD vector with x-axis
         gamma = np.arctan2(BD_vec_y, BD_vec_x)
 
-        # Open solution
+        # Open (elbow up) solution
         theta3_open = gamma + beta
         theta4_open = np.arctan2(r2 * np.sin(theta2) + r3 * np.sin(theta3_open),
                                  r2 * np.cos(theta2) + r3 * np.cos(theta3_open) - r1)
 
-        # Crossed solution
+        # Crossed (elbow down) solution
         theta3_crossed = gamma - beta
         theta4_crossed = np.arctan2(r2 * np.sin(theta2) + r3 * np.sin(theta3_crossed),
                                    r2 * np.cos(theta2) + r3 * np.cos(theta3_crossed) - r1)
 
         return ((theta3_open, theta4_open), (theta3_crossed, theta4_crossed))
     except (ValueError, ZeroDivisionError):
-        # Handle cases where arccos input is out of range or division by zero occurs
+        # Handle math errors (e.g., arccos out of range, division by zero)
         return None, None
 
 # ------------------------------------------------------------------------------------------
 def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
     """
-    Finds feasible input link angles (theta2) for the 4-bar linkage.
+    Find feasible input angle ranges (theta2) for the four-bar linkage.
 
-    Parameters:
-        r1, r2, r3, r4 (float): Link lengths
-        ngrid (int): Number of theta2 samples to test (resolution)
+    Args:
+        r1, r2, r3, r4 (float): Link lengths.
+        ngrid (int): Number of theta2 samples to test for valid ranges.
 
     Returns:
-        list: List of intervals [(theta2_start, theta2_end), ...] in radians
-              Empty list if mechanism is impossible
+        list: List of tuples for valid continuous theta2 ranges in radians,
+              e.g., [(start1, end1), (start2, end2), ...]. Empty if not assemblable.
     """
     thetas = np.linspace(0, 2 * np.pi, ngrid, endpoint=False)
     feasible = np.zeros(ngrid, dtype=bool)
 
-    # Simple check for general impossibility based on triangle inequality
+    # Quick check for impossible linkage (triangle inequality)
     links = np.array([r1, r2, r3, r4])
     if np.max(links) >= np.sum(links) - np.max(links):
         print("    WARNING: Impossible linkage based on the triangle inequality.")
@@ -114,7 +113,7 @@ def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
             split_point = gap_idx[0] + 1
             idx = np.concatenate((idx[split_point:], idx[:split_point]))
     
-    # Identify continuous intervals
+    # Identify continuous intervals in feasible theta2
     if len(idx) > 0:
         start_idx = idx[0]
         for i in range(1, len(idx)):
@@ -129,23 +128,20 @@ def find_theta_limits(r1, r2, r3, r4, ngrid=2000):
 def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500, 
                        set_angles=None, ground_angle=0.0):
     """
-    Computes and plots the coupler curve of a 4-bar linkage.
+    Compute and plot the coupler curve for a four-bar linkage.
 
-    Parameters:
-        r1, r2, r3, r4 (float): Link lengths
-        offset (dict): {"parallel": value, "perpendicular": value} - offsets from coupler link
-        assembly (str): "open", "crossed", or "both"
-        nsteps (int): Number of points for the plot (if set_angles not provided)
-        set_angles (list or np.ndarray): Optional list of theta2 angles (radians) to use directly
-        ground_angle (float): Ground link orientation angle in radians
-
-    Returns:
-        list: List of coupler point coordinates [(x, y), ...]
+    Args:
+        r1, r2, r3, r4 (float): Link lengths.
+        offset (dict): {"parallel": value, "perpendicular": value} - offsets from coupler link.
+        assembly (str): "open", "crossed", or "both" (solution branch).
+        nsteps (int): Number of points to plot.
+        set_angles (tuple): Optional (start, end) theta2 angles in radians.
+        ground_angle (float): Ground link orientation angle in radians.
     """
     points = []
     theta_intervals = None
 
-    # Use set angles directly if provided
+    # Use set_angles directly if provided, otherwise compute feasible intervals
     if set_angles is not None:
         thetas2 = np.linspace(set_angles[0], set_angles[1], nsteps)
     else:
@@ -156,28 +152,29 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
 
     plt.figure(figsize=(8, 8))
 
-    # Define rotation matrix for ground angle
+    # Rotation matrix for ground angle
     R = np.array([[np.cos(ground_angle), -np.sin(ground_angle)],
                   [np.sin(ground_angle),  np.cos(ground_angle)]])
 
     def get_coupler_point(theta2_val, theta3_val):
+        # Calculate coupler point position given input and coupler angles
         B = np.array([r2 * np.cos(theta2_val), r2 * np.sin(theta2_val)])
         C = B + np.array([r3 * np.cos(theta3_val), r3 * np.sin(theta3_val)])
-        
         # Midpoint of BC
         midpoint = (B + C) / 2
         BC_vec = C - B
         if np.linalg.norm(BC_vec) == 0:
-            return R @ B  # Rotate degenerate case
-        
+            return R @ B  # Degenerate case: return rotated B
+        # Unit vector along BC
         u = BC_vec / np.linalg.norm(BC_vec)
+        # Perpendicular vector to BC
         n = np.array([-u[1], u[0]])
-        
+        # Offset from midpoint
         P = midpoint + offset['parallel'] * u + offset['perpendicular'] * n
         return R @ P   # Apply ground rotation
 
     if set_angles is not None:
-        # Direct evaluation at specified angles
+        # Direct evaluation at specified theta2 angles
         prev_point = None
         for theta2 in thetas2:
             solutions = solve_linkage(r1, r2, r3, r4, theta2)
@@ -207,7 +204,7 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
                     points.append(prev_point)
 
     else:
-        # Sweep feasible intervals
+        # Sweep feasible intervals for theta2
         for a, b in theta_intervals:
             print(f"Feasible θ₂ range: {np.degrees(a):.2f}° to {np.degrees(b):.2f}°")
             thetas2 = np.linspace(a, b, nsteps)
@@ -242,11 +239,15 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
 
     if points:
         pts = np.array(points)
-        plt.scatter(pts[:, 0], pts[:, 1], s=5, color='blue')
-        plt.xlabel("x")
-        plt.ylabel("y")
+        plt.scatter(pts[:, 0], pts[:, 1], color='blue', s=5) # Use plot for continuous lines
+        plt.scatter(pts[0, 0], pts[0, 1], color='green', s=50, zorder=5, label="Start")
+        plt.scatter(pts[-1, 0], pts[-1, 1], color='red', s=50, zorder=5, label="End")
+        plt.xlabel("x-coordinate")
+        plt.ylabel("y-coordinate")
         plt.axis("equal")
-        plt.title(f"Coupler Curve ({assembly}, ground={np.degrees(ground_angle):.1f}°)")
+        plt.grid(True)
+        plt.title(f"Coupler Curve (Assembly: {assembly}, Ground Angle: {np.degrees(ground_angle):.1f}°)")
+        plt.legend()
         plt.show()
 
     return
@@ -254,99 +255,93 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
 # ------------------------------------------------------------------------------------------
 def take_inputs():
     """
-    Prompts user for input values: link lengths, offsets, and assembly mode.
+    Prompts the user for all necessary input values for the linkage.
 
     Returns:
-        dict: Link lengths {"Ground Link", "Input Link", "Coupler Link", "Output Link"}
-        dict: Offsets {"parallel", "perpendicular"}
-        str: Assembly mode ("Open", "Crossed", "Both")
+        tuple: (link_lengths, coupler_offsets, assembly_mode, ground_angle)
     """
-    Coupler_lengths = {"Ground Link": 0, "Input Link": 0, "Coupler Link": 0, "Output Link": 0}
-    for link in Coupler_lengths.keys():
+    link_lengths = {}
+    link_names = ["Ground Link", "Input Link", "Coupler Link", "Output Link"]
+    for name in link_names:
         while True:
             try:
-                val = float(input(f"Enter {link} length: "))
+                val = float(input(f"Enter {name} length: "))
                 if val > 0:
-                    Coupler_lengths[link] = val
+                    link_lengths[name] = val
                     break
                 else:
-                    print("Link length must be a positive number.")
+                    print("Error: Link length must be a positive number.")
             except ValueError:
-                print("Invalid input, please enter a number.")
+                print("Error: Invalid input. Please enter a number.")
 
-    Coupler_offsets = {"parallel": 0, "perpendicular": 0}
-    for key in Coupler_offsets.keys():
+    coupler_offsets = {}
+    for direction in ["parallel", "perpendicular"]:
         while True:
             try:
-                val = float(input(f"Enter coupler offset {key} to coupler link: "))
-                Coupler_offsets[key] = val
+                val = float(input(f"Enter coupler offset {direction} to coupler link: "))
+                coupler_offsets[direction] = val
                 break
             except ValueError:
-                print("Invalid input, please enter a number.")
+                print("Error: Invalid input. Please enter a number.")
 
     while True:
-        Assembly_mode = input("Choose assembly mode [Open/Crossed/Both]: ").capitalize()
-        if Assembly_mode in ["Open", "Crossed", "Both"]:
+        assembly_mode = input("Choose assembly mode [Open/Crossed/Both]: ").capitalize()
+        if assembly_mode in ["Open", "Crossed", "Both"]:
             break
         else:
-            print("Invalid option, try again.")
-
+            print("Error: Invalid option. Please enter Open, Crossed, or Both.")
 
     while True:
-            try:
-                ground_angle = float(input(f"Enter ground angle [0,360°]: "))
-                if 0 <= ground_angle <= 360:
-                    ground_angle = math.radians(ground_angle)
-                    break
-                else:
-                    print("Invalid input, please enter a float between 0 and 360")
-            except ValueError:
-                print("Invalid input, please enter a number.")
-                
-    return Coupler_lengths, Coupler_offsets, Assembly_mode, ground_angle
+        try:
+            angle_deg = float(input("Enter ground link angle in degrees [0-360]: "))
+            ground_angle = math.radians(angle_deg)
+            break
+        except ValueError:
+            print("Error: Invalid input. Please enter a number.")
+            
+    return link_lengths, coupler_offsets, assembly_mode, ground_angle
 
 
 # ------------------------------------------------------------------------------------------
-def classify_mechanism(Coupler_lengths):
+def classify_mechanism(link_lengths):
     """
-    Classifies the linkage according to Grashof’s criterion.
+    Classifies the linkage type based on Grashof’s criterion.
 
     Parameters:
-        Coupler_lengths (dict): {"Ground Link", "Input Link", "Coupler Link", "Output Link"}
+        link_lengths (dict): Dictionary of link lengths.
 
     Returns:
-        str: Classification ("Double-crank", "Crank-rocker", "Double-rocker", "Non-Grashof")
+        str: The classification of the mechanism (e.g., "Crank-rocker").
     """
-    L = sorted(list(Coupler_lengths.values()))
-    s, p, q, l = L[0], L[1], L[2], L[3]
+    lengths = list(link_lengths.values())
+    s = min(lengths)  # Shortest link
+    l = max(lengths)  # Longest link
+    p, q = sorted(lengths)[1:3] # The other two links
+
     if s + l <= p + q:
-        print("Parameters satisfy Grashof's Criterion.")
-        grashof = True
+        print("This is a Grashof linkage (at least one link can fully rotate).")
+        # Identify the specific type based on which link is shortest
+        if link_lengths['Ground Link'] == s:
+            return "Double-crank (or Drag-link)"
+        elif link_lengths['Input Link'] == s:
+            return "Crank-rocker"
+        elif link_lengths['Output Link'] == s:
+            # If output is shortest, it's a crank-rocker, but driven from the other side
+            return "Crank-rocker (driven from adjacent link)"
+        elif link_lengths['Coupler Link'] == s:
+            return "Double-rocker"
     else:
-        print("Parameters do not satisfy Grashof's Criterion.")
-        grashof = False
+        print("This is a non-Grashof linkage (no link can fully rotate).")
+        return "Triple-rocker"
 
-    if not grashof:
-        return "Non-Grashof (Triple-rocker)"
-
-    # Identify configuration by which link is the shortest
-    if Coupler_lengths['Ground Link'] == s:
-        return "Double-crank (Drag-link)"
-    elif Coupler_lengths['Input Link'] == s or Coupler_lengths['Output Link'] == s:
-        return "Crank-rocker"
-    elif Coupler_lengths['Coupler Link'] == s:
-        return "Double-rocker (Rocker-rocker)"
-    else:
-        return "Grashof, but special case."
+    return "Grashof, but a special case (e.g., two links have the same shortest length)."
 
 # ------------------------------------------------------------------------------------------
 def main():
     """
-    Main program flow:
-    1. Get inputs from user
-    2. Classify mechanism
-    3. Compute and plot coupler curve
+    Main program execution function. Handles user interaction and runs analysis.
     """
+    # Prompt for demo or custom input
     while True:
         demo = input(f"Option 1: Design your own system.\nOption 2: Use preset for Vertical demo.\nAnswer: ")
         if demo in ["1", "2"]:
@@ -355,6 +350,7 @@ def main():
             print("Please answer with 1 or 2.")
 
     if demo == "2":
+        # Preset demo parameters
         Coupler_lengths = {"Ground Link": 20, "Input Link": 15, "Coupler Link": 11, "Output Link": 15}
         Coupler_offsets = {"parallel": 0, "perpendicular": -22}
         angles = [0.85,1.55]
@@ -363,11 +359,13 @@ def main():
         mech_type = classify_mechanism(Coupler_lengths)
         print(f"Mechanism classification: {mech_type}")
     else:
+        # Custom user input
         Coupler_lengths, Coupler_offsets, Assembly_mode, ground_angle = take_inputs()
         mech_type = classify_mechanism(Coupler_lengths)
         print(f"Mechanism classification: {mech_type}")
         angles = None
 
+    # Run coupler curve analysis and plot
     coupler_curve_geom(
         Coupler_lengths['Ground Link'],
         Coupler_lengths["Input Link"],
