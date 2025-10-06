@@ -258,9 +258,7 @@ def coupler_curve_geom(r1, r2, r3, r4, offset, assembly="open", nsteps=500,
 
     if points:
         pts = np.array(points)
-        plt.scatter(pts[:, 0], pts[:, 1], color='blue', s=5) # Use plot for continuous lines
-        plt.scatter(pts[0, 0], pts[0, 1], color='green', s=50, zorder=5, label="Start")
-        plt.scatter(pts[-1, 0], pts[-1, 1], color='red', s=50, zorder=5, label="End")
+        plt.scatter(pts[:, 0], pts[:, 1], color='blue', s=5)
         plt.xlabel("x-coordinate")
         plt.ylabel("y-coordinate")
         plt.axis("equal")
