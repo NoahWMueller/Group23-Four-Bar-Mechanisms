@@ -6,6 +6,12 @@ import matplotlib.pyplot as plt
 # 4-BAR LINKAGE ANALYSIS PROGRAM
 ############################################################################################
 #
+# SETUP/INSTALLATION:
+# This script requires the `numpy` and `matplotlib` libraries.
+# To install them, run the following command in your terminal:
+# pip install numpy matplotlib
+#
+#-------------------------------------------------------------------------------------------
 # USAGE INSTRUCTIONS:
 # 1. Run this script from your terminal (`python coding_project.py`).
 # 2. Choose to enter custom linkage parameters (Option 1) or use a preset demo (Option 2).
@@ -13,7 +19,8 @@ import matplotlib.pyplot as plt
 # 4. Specify parallel and perpendicular offsets for the coupler point (location of interest on the coupler link).
 # 5. Select the assembly mode: "Open", "Crossed", or "Both".
 # 6. Enter the ground link's orientation angle (in degrees).
-# 7. The program will classify the mechanism (Grashof's criterion), determine valid input angle ranges, and plot the coupler curve.
+# 7. The program will classify the mechanism (Grashof's criterion), determine
+#    valid input angle ranges, and plot the coupler curve.
 #
 ############################################################################################
 
